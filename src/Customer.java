@@ -2,12 +2,15 @@ public class Customer {
     public enum Status { WAITING, SEATED, SERVED, READY_TO_PAY, PAID, LEFT }
 
     private final int id;
+    private final Restaurant.HappyHour happyHour;
     private int satisfaction = 100;
     private Status status = Status.WAITING;
     private Order order;
 
-    public Customer(int id) {
+    public Customer(int id, Restaurant.HappyHour happyHour) {
+        Restaurant.require(happyHour != null, "A pricing policy is required.");
         this.id = id;
+        this.happyHour = happyHour;
     }
 
     public int getId() {
@@ -42,7 +45,11 @@ public class Customer {
         return order;
     }
 
-    public Order.MenuItem chooseFood() {
+    public Order.Meal chooseFood() {
+        if (id % 4 == 0) {
+            return new Order.ComboMeal(Order.MenuItem.SALAD, Order.MenuItem.PASTA);
+        }
+
         Order.MenuItem[] items = Order.MenuItem.values();
         int menuIndex = (id - 1) % items.length;
         return items[menuIndex];
@@ -57,8 +64,9 @@ public class Customer {
     public Order placeOrder() {
         Restaurant.require(status == Status.SEATED, "That customer is not seated.");
         Restaurant.require(order == null, "That customer has already placed an order.");
-        Order.MenuItem item = chooseFood();
+        Order.Meal item = chooseFood();
         int billCents = calculateBill(item.getPriceCents());
+        billCents = happyHour.applyToBill(billCents);
         order = new Order(item, billCents);
         return order;
     }
@@ -70,7 +78,6 @@ public class Customer {
         status = Status.SERVED;
     }
 
-    // A customer served this turn must wait until the following turn to finish.
     public void finishEating(int turn) {
         if (status == Status.SERVED && order.getServedTurn() < turn) {
             order.finishEating(turn);
@@ -94,6 +101,12 @@ public class Customer {
         }
     }
 
+    public void recoverSatisfaction(int points) {
+        if (isWaitingForService()) {
+            satisfaction = Math.min(100, satisfaction + points);
+        }
+    }
+
     public void leave() {
         Restaurant.require(isWaitingForService(),
                 "Only a waiting customer can abandon the restaurant.");
@@ -101,48 +114,5 @@ public class Customer {
             order.cancel();
         }
         status = Status.LEFT;
-    }
-
-    public static final class VIPCustomer extends Customer {
-        public VIPCustomer(int id) {
-            super(id);
-        }
-
-        @Override
-        public String getType() {
-            return "VIP";
-        }
-
-        @Override
-        protected int getWaitingLoss() {
-            return 5;
-        }
-
-        @Override
-        protected int calculateBill(int priceCents) {
-            // Apply the 10% discount and round to the nearest cent.
-            return (int) ((priceCents * 90L + 50) / 100);
-        }
-    }
-
-    public static final class CriticCustomer extends Customer {
-        public CriticCustomer(int id) {
-            super(id);
-        }
-
-        @Override
-        public String getType() {
-            return "Critic";
-        }
-
-        @Override
-        protected int getWaitingLoss() {
-            return 12;
-        }
-
-        @Override
-        public Order.MenuItem chooseFood() {
-            return Order.MenuItem.PASTA;
-        }
     }
 }

@@ -42,7 +42,6 @@ public abstract class Staff {
 
     private int lastActionTurn = -1;
 
-    // Record the turn only after validation and execution succeed.
     public final void perform(Task task, int turn) {
         Restaurant.require(task != null, "Choose a task.");
         Restaurant.require(turn > 0, "The turn must be positive.");
@@ -55,12 +54,28 @@ public abstract class Staff {
         lastActionTurn = turn;
     }
 
-    public final void waitTurn(int turn) {
-        perform(Task.waiting(), turn);
-    }
-
     protected abstract void validateTask(Task task);
     protected abstract void executeTask(Task task, int turn);
+
+    protected final void validateSeating(Task task) {
+        Restaurant.require(task.getCustomer().getStatus() == Customer.Status.WAITING,
+                "That customer is not in the waiting queue.");
+        Restaurant.require(task.getTable() != null, "Both tables are occupied.");
+        Restaurant.require(task.getTable().isFree(), "That table is occupied.");
+    }
+
+    public static final class Host extends Staff {
+        @Override
+        protected void validateTask(Task task) {
+            Restaurant.require(task.getAction() == Action.SEAT, "The Host can only seat customers.");
+            validateSeating(task);
+        }
+
+        @Override
+        protected void executeTask(Task task, int turn) {
+            task.getTable().seat(task.getCustomer());
+        }
+    }
 
     public static final class Waiter extends Staff {
         @Override
@@ -68,10 +83,7 @@ public abstract class Staff {
             Customer customer = task.getCustomer();
             switch (task.getAction()) {
                 case SEAT:
-                    Restaurant.require(customer.getStatus() == Customer.Status.WAITING,
-                            "That customer is not in the waiting queue.");
-                    Restaurant.require(task.getTable() != null, "Both tables are occupied.");
-                    Restaurant.require(task.getTable().isFree(), "That table is occupied.");
+                    validateSeating(task);
                     break;
                 case TAKE_ORDER:
                     Restaurant.require(customer.getStatus() == Customer.Status.SEATED,

@@ -1,21 +1,24 @@
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 
-/** Coordinates turns and keeps the restaurant's customers, tables and staff. */
 public class Restaurant {
     public static final int MAX_TURNS = 18;
-    public static final int WAITER_ID = 1;
-    public static final int CHEF_ID = 2;
-    private static final int CASHIER_ID = 3;
+    public static final int TARGET_PAID_CUSTOMERS = 4;
+    public static final int TARGET_REVENUE_CENTS = 4500;
+    public static final int TARGET_AVERAGE_SATISFACTION = 60;
+
+    public enum Role { HOST, WAITER, CHEF, CASHIER }
 
     private final List<Customer> customers = new ArrayList<>();
     private final Queue<Customer> waitingQueue = new ArrayDeque<>();
-    private final List<Order> orders = new ArrayList<>();
     private final List<Table> tables = new ArrayList<>();
-    private final List<Staff> staff = new ArrayList<>();
+    private final Map<Role, Staff> staff = new EnumMap<>(Role.class);
+    private final HappyHour happyHour = new HappyHour();
     private int turn;
     private int revenueCents;
     private int servedCount;
@@ -24,14 +27,15 @@ public class Restaurant {
     private int paidSatisfactionTotal;
     private Phase phase = Phase.BETWEEN_TURNS;
 
-    private enum Phase { BETWEEN_TURNS, WAITER, CHEF, RESOLUTION }
+    private enum Phase { BETWEEN_TURNS, HOST, WAITER, CHEF, RESOLUTION }
 
     public Restaurant() {
         tables.add(new Table(1));
         tables.add(new Table(2));
-        staff.add(new Staff.Waiter());
-        staff.add(new Staff.Chef());
-        staff.add(new Staff.Cashier());
+        staff.put(Role.WAITER, new Staff.Waiter());
+        staff.put(Role.CHEF, new Staff.Chef());
+        staff.put(Role.CASHIER, new Staff.Cashier());
+        staff.put(Role.HOST, new Staff.Host());
     }
 
     public int getTurn() {
@@ -70,30 +74,46 @@ public class Restaurant {
         return Collections.unmodifiableList(tables);
     }
 
-    public List<Order> getOrders() {
-        return Collections.unmodifiableList(orders);
+    public boolean canActivateHappyHour() {
+        return phase == Phase.BETWEEN_TURNS && turn < MAX_TURNS && !happyHour.isUsed();
+    }
+
+    public int getHappyHourTurnsRemaining() {
+        return happyHour.getTurnsRemaining();
     }
 
     public void startTurn() {
+        startTurn(false);
+    }
+
+    public void startTurn(boolean activateHappyHour) {
         require(phase == Phase.BETWEEN_TURNS, "Finish the current turn first.");
         require(turn < MAX_TURNS, "The game has finished.");
+
+        happyHour.startTurn(activateHappyHour);
         turn++;
-        phase = Phase.WAITER;
-        // Arrivals are scheduled for turns 1, 4, 7, 10, 13 and 16.
+        phase = Phase.HOST;
+
         if ((turn - 1) % 3 == 0) {
             int id = customers.size() + 1;
             Customer customer;
 
             if (id == 2) {
-                customer = new Customer.VIPCustomer(id);
+                customer = new VIPCustomer(id, happyHour);
             } else if (id == 3) {
-                customer = new Customer.CriticCustomer(id);
+                customer = new CriticCustomer(id, happyHour);
             } else {
-                customer = new Customer(id);
+                customer = new Customer(id, happyHour);
             }
 
             customers.add(customer);
             waitingQueue.add(customer);
+        }
+
+        if (happyHour.isActive()) {
+            for (Customer customer : customers) {
+                customer.recoverSatisfaction(15);
+            }
         }
     }
 
@@ -109,13 +129,15 @@ public class Restaurant {
         return Staff.Task.forCustomer(action, customer);
     }
 
-    public void assignTask(int staffId, Staff.Task task) {
+    public void assignTask(Role role, Staff.Task task) {
         require(task != null, "Choose a task.");
-        require(staffId == WAITER_ID || staffId == CHEF_ID,
-                "Only the Waiter and Chef take manager assignments.");
-        boolean waiterTurn = staffId == WAITER_ID && phase == Phase.WAITER;
-        boolean chefTurn = staffId == CHEF_ID && phase == Phase.CHEF;
-        require(waiterTurn || chefTurn, "Staff must act in order: Waiter, then Chef.");
+        require(role == Role.HOST || role == Role.WAITER || role == Role.CHEF,
+                "Only the Host, Waiter and Chef take manager assignments.");
+        boolean hostTurn = role == Role.HOST && phase == Phase.HOST;
+        boolean waiterTurn = role == Role.WAITER && phase == Phase.WAITER;
+        boolean chefTurn = role == Role.CHEF && phase == Phase.CHEF;
+        require(hostTurn || waiterTurn || chefTurn,
+                "Staff must act in order: Host, Waiter, then Chef.");
         if (task.getCustomer() != null) {
             require(customers.contains(task.getCustomer()), "That customer is not in this game.");
         }
@@ -123,22 +145,24 @@ public class Restaurant {
             require(tables.contains(task.getTable()), "That table is not in this restaurant.");
         }
 
-        Staff assignedStaff = staff.get(staffId - 1);
-        assignedStaff.perform(task, turn);
+        staff.get(role).perform(task, turn);
         if (task.getAction() == Staff.Action.SEAT) {
             waitingQueue.remove(task.getCustomer());
-        }
-        if (task.getAction() == Staff.Action.TAKE_ORDER) {
-            orders.add(task.getCustomer().getOrder());
         }
         if (task.getAction() == Staff.Action.SERVE) {
             servedCount++;
         }
-        phase = staffId == WAITER_ID ? Phase.CHEF : Phase.RESOLUTION;
+        if (role == Role.HOST) {
+            phase = Phase.WAITER;
+        } else if (role == Role.WAITER) {
+            phase = Phase.CHEF;
+        } else {
+            phase = Phase.RESOLUTION;
+        }
     }
 
     public void finishTurn() {
-        require(phase == Phase.RESOLUTION, "Both staff choices must be completed.");
+        require(phase == Phase.RESOLUTION, "All staff choices must be completed.");
 
         for (Customer customer : customers) {
             customer.finishEating(turn);
@@ -157,8 +181,7 @@ public class Restaurant {
             task = Staff.Task.forCustomer(Staff.Action.PAY, customer);
         }
 
-        Staff cashier = staff.get(CASHIER_ID - 1);
-        cashier.perform(task, turn);
+        staff.get(Role.CASHIER).perform(task, turn);
 
         if (customer != null) {
             revenueCents += customer.getOrder().getBillCents();
@@ -184,8 +207,9 @@ public class Restaurant {
 
     public boolean isVictory() {
         return turn == MAX_TURNS && phase == Phase.BETWEEN_TURNS
-                && paidCount >= 4 && revenueCents >= 4500
-                && paidSatisfactionTotal >= 60 * paidCount;
+                && paidCount >= TARGET_PAID_CUSTOMERS
+                && revenueCents >= TARGET_REVENUE_CENTS
+                && paidSatisfactionTotal >= TARGET_AVERAGE_SATISFACTION * paidCount;
     }
 
     public boolean canSeat() {
@@ -202,8 +226,9 @@ public class Restaurant {
     }
 
     public boolean canServe() {
-        for (Order order : orders) {
-            if (order.getStatus() == Order.Status.READY) {
+        for (Customer customer : customers) {
+            Order order = customer.getOrder();
+            if (order != null && order.getStatus() == Order.Status.READY) {
                 return true;
             }
         }
@@ -236,7 +261,6 @@ public class Restaurant {
             }
 
             int readyTurn = customer.getOrder().getReadyToPayTurn();
-            // Becoming ready and paying must happen on different turns.
             if (readyTurn >= turn) {
                 continue;
             }
@@ -262,6 +286,42 @@ public class Restaurant {
                 table.release();
                 return;
             }
+        }
+    }
+
+    public static final class HappyHour {
+        private boolean used;
+        private int turnsRemaining;
+
+        private void startTurn(boolean activate) {
+            require(!activate || !used, "Happy Hour can only be activated once.");
+
+            if (turnsRemaining > 0) {
+                turnsRemaining--;
+            }
+            if (activate) {
+                used = true;
+                turnsRemaining = 2;
+            }
+        }
+
+        public boolean isUsed() {
+            return used;
+        }
+
+        public boolean isActive() {
+            return turnsRemaining > 0;
+        }
+
+        public int getTurnsRemaining() {
+            return turnsRemaining;
+        }
+
+        public int applyToBill(int billCents) {
+            if (isActive()) {
+                return (int) ((billCents * 80L + 50) / 100);
+            }
+            return billCents;
         }
     }
 

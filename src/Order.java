@@ -1,5 +1,11 @@
 public class Order {
-    public enum MenuItem {
+    public interface Meal {
+        String getName();
+        int getPriceCents();
+        int getPreparationUnits();
+    }
+
+    public enum MenuItem implements Meal {
         SALAD("Salad", 900, 1),
         BURGER("Burger", 1500, 1),
         PASTA("Pasta", 1800, 2);
@@ -27,24 +33,50 @@ public class Order {
         }
     }
 
+    public static final class ComboMeal implements Meal {
+        private final MenuItem first;
+        private final MenuItem second;
+
+        public ComboMeal(MenuItem first, MenuItem second) {
+            Restaurant.require(first != null && second != null, "Choose two menu items.");
+            this.first = first;
+            this.second = second;
+        }
+
+        @Override
+        public String getName() {
+            return "Combo (" + first.getName() + " + " + second.getName() + ")";
+        }
+
+        @Override
+        public int getPriceCents() {
+            int combinedPrice = first.getPriceCents() + second.getPriceCents();
+            return (int) ((combinedPrice * 90L + 50) / 100);
+        }
+
+        @Override
+        public int getPreparationUnits() {
+            return first.getPreparationUnits() + second.getPreparationUnits();
+        }
+    }
+
     public enum Status { PREPARING, READY, SERVED, READY_TO_PAY, PAID, CANCELLED }
 
-    private final MenuItem item;
-    // Keep the price fixed from the moment the order is placed.
+    private final Meal item;
     private final int billCents;
     private int completedUnits;
     private int servedTurn = -1;
     private int readyToPayTurn = -1;
     private Status status = Status.PREPARING;
 
-    public Order(MenuItem item, int billCents) {
+    public Order(Meal item, int billCents) {
         Restaurant.require(item != null, "Choose a menu item.");
         Restaurant.require(billCents >= 0, "The bill cannot be negative.");
         this.item = item;
         this.billCents = billCents;
     }
 
-    public MenuItem getItem() {
+    public Meal getItem() {
         return item;
     }
 
