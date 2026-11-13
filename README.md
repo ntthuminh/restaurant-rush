@@ -56,7 +56,7 @@ java -cp build/stage-2 RestaurantRushApp
 
 ```bash
 mkdir -p build/stage-3
-javac -d build/stage-3 Stage-3/*.java
+javac -d build/stage-3 Stage-3/Codes/*.java
 java -cp build/stage-3 RestaurantRushApp
 ```
 
