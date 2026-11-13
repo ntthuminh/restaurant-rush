@@ -37,10 +37,11 @@ public class Order {
     private int readyToPayTurn = -1;
     private Status status = Status.PREPARING;
 
-    public Order(MenuItem item) {
+    public Order(MenuItem item, int billCents) {
         Restaurant.require(item != null, "Choose a menu item.");
+        Restaurant.require(billCents >= 0, "The bill cannot be negative.");
         this.item = item;
-        this.billCents = item.getPriceCents();
+        this.billCents = billCents;
     }
 
     public MenuItem getItem() {

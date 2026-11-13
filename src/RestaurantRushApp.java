@@ -29,14 +29,17 @@ public class RestaurantRushApp {
     }
 
     private void displayWelcome() {
-        System.out.println("RESTAURANT RUSH - STAGE 1");
+        System.out.println("RESTAURANT RUSH - STAGE 2");
         System.out.println("Goal: 4 paid customers, $45.00 revenue, 60 average satisfaction.");
         System.out.println("18 turns | 2 tables | 1 Waiter | 1 Chef | 1 Cashier");
         for (Order.MenuItem item : Order.MenuItem.values()) {
             System.out.printf("%s: %s (%d preparation unit(s))%n",
                     item.getName(), money(item.getPriceCents()), item.getPreparationUnits());
         }
-        System.out.println("Customer choices repeat: Salad, Burger, Pasta.");
+        System.out.println("C2 is a VIP. C3 is a Critic. The other arrivals are Regular.");
+        System.out.println("Regular and VIP choices repeat by customer ID: Salad, Burger, Pasta.");
+        System.out.println("Critics always choose Pasta.");
+        System.out.println("Waiting loss: Regular 8, VIP 5, Critic 12. VIP bills get 10% off.");
         System.out.println("Enter customer numbers: for C1, enter 1.");
     }
 

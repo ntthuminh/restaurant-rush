@@ -15,7 +15,19 @@ public class Customer {
     }
 
     public String getLabel() {
-        return "C" + id;
+        return "C" + id + " (" + getType() + ")";
+    }
+
+    public String getType() {
+        return "Regular";
+    }
+
+    protected int getWaitingLoss() {
+        return 8;
+    }
+
+    protected int calculateBill(int priceCents) {
+        return priceCents;
     }
 
     public int getSatisfaction() {
@@ -32,7 +44,6 @@ public class Customer {
 
     public Order.MenuItem chooseFood() {
         Order.MenuItem[] items = Order.MenuItem.values();
-        // Keep food choices reproducible: Salad, Burger, Pasta, then repeat.
         int menuIndex = (id - 1) % items.length;
         return items[menuIndex];
     }
@@ -46,7 +57,9 @@ public class Customer {
     public Order placeOrder() {
         Restaurant.require(status == Status.SEATED, "That customer is not seated.");
         Restaurant.require(order == null, "That customer has already placed an order.");
-        order = new Order(chooseFood());
+        Order.MenuItem item = chooseFood();
+        int billCents = calculateBill(item.getPriceCents());
+        order = new Order(item, billCents);
         return order;
     }
 
@@ -77,7 +90,7 @@ public class Customer {
 
     public void loseSatisfaction() {
         if (isWaitingForService()) {
-            satisfaction = Math.max(0, satisfaction - 8);
+            satisfaction = Math.max(0, satisfaction - getWaitingLoss());
         }
     }
 
@@ -88,5 +101,48 @@ public class Customer {
             order.cancel();
         }
         status = Status.LEFT;
+    }
+
+    public static final class VIPCustomer extends Customer {
+        public VIPCustomer(int id) {
+            super(id);
+        }
+
+        @Override
+        public String getType() {
+            return "VIP";
+        }
+
+        @Override
+        protected int getWaitingLoss() {
+            return 5;
+        }
+
+        @Override
+        protected int calculateBill(int priceCents) {
+            // Apply the 10% discount and round to the nearest cent.
+            return (int) ((priceCents * 90L + 50) / 100);
+        }
+    }
+
+    public static final class CriticCustomer extends Customer {
+        public CriticCustomer(int id) {
+            super(id);
+        }
+
+        @Override
+        public String getType() {
+            return "Critic";
+        }
+
+        @Override
+        protected int getWaitingLoss() {
+            return 12;
+        }
+
+        @Override
+        public Order.MenuItem chooseFood() {
+            return Order.MenuItem.PASTA;
+        }
     }
 }

@@ -81,7 +81,17 @@ public class Restaurant {
         phase = Phase.WAITER;
         // Arrivals are scheduled for turns 1, 4, 7, 10, 13 and 16.
         if ((turn - 1) % 3 == 0) {
-            Customer customer = new Customer(customers.size() + 1);
+            int id = customers.size() + 1;
+            Customer customer;
+
+            if (id == 2) {
+                customer = new Customer.VIPCustomer(id);
+            } else if (id == 3) {
+                customer = new Customer.CriticCustomer(id);
+            } else {
+                customer = new Customer(id);
+            }
+
             customers.add(customer);
             waitingQueue.add(customer);
         }
