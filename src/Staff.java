@@ -1,5 +1,5 @@
 public abstract class Staff {
-    public enum Action { WAIT, SEAT, TAKE_ORDER, SERVE, PREPARE, PAY }
+    public enum Action { WAIT, SEAT, TAKE_ORDER, SERVE, PREPARE, MIX_DRINK, PAY }
 
     public static final class Task {
         private final Action action;
@@ -7,7 +7,7 @@ public abstract class Staff {
         private final Table table;
 
         private Task(Action action, Customer customer, Table table) {
-            Restaurant.require(action != null, "Choose a task.");
+            Preconditions.check(action != null, "Choose a task.");
             this.action = action;
             this.customer = customer;
             this.table = table;
@@ -22,7 +22,7 @@ public abstract class Staff {
         }
 
         public static Task forCustomer(Action action, Customer customer) {
-            Restaurant.require(action != Action.WAIT && action != Action.SEAT,
+            Preconditions.check(action != Action.WAIT && action != Action.SEAT,
                     "Use the waiting or seating task factory for that action.");
             return new Task(action, customer, null);
         }
@@ -43,11 +43,11 @@ public abstract class Staff {
     private int lastActionTurn = -1;
 
     public final void perform(Task task, int turn) {
-        Restaurant.require(task != null, "Choose a task.");
-        Restaurant.require(turn > 0, "The turn must be positive.");
-        Restaurant.require(turn > lastActionTurn, "This staff member has already acted this turn.");
+        Preconditions.check(task != null, "Choose a task.");
+        Preconditions.check(turn > 0, "The turn must be positive.");
+        Preconditions.check(turn > lastActionTurn, "This staff member has already acted this turn.");
         if (task.getAction() != Action.WAIT) {
-            Restaurant.require(task.getCustomer() != null, "Choose a customer.");
+            Preconditions.check(task.getCustomer() != null, "Choose a customer.");
             validateTask(task);
             executeTask(task, turn);
         }
@@ -55,19 +55,25 @@ public abstract class Staff {
     }
 
     protected abstract void validateTask(Task task);
+
     protected abstract void executeTask(Task task, int turn);
 
     protected final void validateSeating(Task task) {
-        Restaurant.require(task.getCustomer().getStatus() == Customer.Status.WAITING,
+        Preconditions.require(task.getCustomer().getStatus() == Customer.Status.WAITING,
                 "That customer is not in the waiting queue.");
-        Restaurant.require(task.getTable() != null, "Both tables are occupied.");
-        Restaurant.require(task.getTable().isFree(), "That table is occupied.");
+        Preconditions.require(task.getTable() != null, "Both tables are occupied.");
+        Preconditions.require(task.getTable().isFree(), "That table is occupied.");
+    }
+
+    protected final void validateHasOrder(Task task) {
+        Preconditions.require(task.getCustomer().getOrder() != null,
+                "That customer has not placed an order.");
     }
 
     public static final class Host extends Staff {
         @Override
         protected void validateTask(Task task) {
-            Restaurant.require(task.getAction() == Action.SEAT, "The Host can only seat customers.");
+            Preconditions.require(task.getAction() == Action.SEAT, "The Host can only seat customers.");
             validateSeating(task);
         }
 
@@ -86,21 +92,20 @@ public abstract class Staff {
                     validateSeating(task);
                     break;
                 case TAKE_ORDER:
-                    Restaurant.require(customer.getStatus() == Customer.Status.SEATED,
+                    Preconditions.require(customer.getStatus() == Customer.Status.SEATED,
                             "That customer is not seated.");
-                    Restaurant.require(customer.getOrder() == null,
+                    Preconditions.require(customer.getOrder() == null,
                             "That customer has already placed an order.");
                     break;
                 case SERVE:
-                    Restaurant.require(customer.getStatus() == Customer.Status.SEATED,
+                    Preconditions.require(customer.getStatus() == Customer.Status.SEATED,
                             "That customer is not waiting for food.");
-                    Restaurant.require(customer.getOrder() != null,
-                            "That customer has not placed an order.");
-                    Restaurant.require(customer.getOrder().getStatus() == Order.Status.READY,
+                    validateHasOrder(task);
+                    Preconditions.require(customer.getOrder().getStatus() == Order.Status.READY,
                             "That order is not READY.");
                     break;
                 default:
-                    throw new IllegalArgumentException("The Waiter can seat, take orders or serve.");
+                    throw new InvalidActionException("The Waiter can seat, take orders or serve.");
             }
         }
 
@@ -117,7 +122,7 @@ public abstract class Staff {
                     task.getCustomer().receiveFood(turn);
                     break;
                 default:
-                    throw new IllegalArgumentException("Unsupported Waiter task.");
+                    throw new IllegalStateException("Unsupported Waiter task.");
             }
         }
     }
@@ -125,10 +130,9 @@ public abstract class Staff {
     public static final class Chef extends Staff {
         @Override
         protected void validateTask(Task task) {
-            Restaurant.require(task.getAction() == Action.PREPARE, "The Chef can only prepare food.");
-            Restaurant.require(task.getCustomer().getOrder() != null,
-                    "That customer has not placed an order.");
-            Restaurant.require(task.getCustomer().getOrder().getStatus() == Order.Status.PREPARING,
+            Preconditions.require(task.getAction() == Action.PREPARE, "The Chef can only prepare food.");
+            validateHasOrder(task);
+            Preconditions.require(task.getCustomer().getOrder().needsCooking(),
                     "That order does not need preparation.");
         }
 
@@ -138,17 +142,33 @@ public abstract class Staff {
         }
     }
 
+    public static final class Bartender extends Staff {
+        @Override
+        protected void validateTask(Task task) {
+            Preconditions.require(task.getAction() == Action.MIX_DRINK,
+                    "The Bartender can only make drinks.");
+            validateHasOrder(task);
+            Preconditions.require(task.getCustomer().getOrder().needsMixing(),
+                    "That order has no drink to make.");
+        }
+
+        @Override
+        protected void executeTask(Task task, int turn) {
+            task.getCustomer().getOrder().mixDrink();
+        }
+    }
+
     public static final class Cashier extends Staff {
         @Override
         protected void validateTask(Task task) {
-            Restaurant.require(task.getAction() == Action.PAY, "The Cashier can only collect payment.");
-            Restaurant.require(task.getCustomer().getStatus() == Customer.Status.READY_TO_PAY,
+            Preconditions.check(task.getAction() == Action.PAY, "The Cashier can only collect payment.");
+            Preconditions.check(task.getCustomer().getStatus() == Customer.Status.READY_TO_PAY,
                     "That customer is not ready to pay.");
         }
 
         @Override
         protected void executeTask(Task task, int turn) {
-            Restaurant.require(task.getCustomer().getOrder().getReadyToPayTurn() < turn,
+            Preconditions.check(task.getCustomer().getOrder().getReadyToPayTurn() < turn,
                     "A newly ready customer cannot pay until the next turn.");
             task.getCustomer().pay();
         }

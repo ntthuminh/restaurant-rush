@@ -1,6 +1,12 @@
 public class CriticCustomer extends Customer {
-    public CriticCustomer(int id, Restaurant.HappyHour happyHour) {
-        super(id, happyHour);
+    public static final int WAITING_LOSS = 12;
+
+    public CriticCustomer(int id, PricingPolicy pricing) {
+        super(id, pricing);
+    }
+
+    public CriticCustomer(int id, PricingPolicy pricing, Order.Drink plannedDrink) {
+        super(id, pricing, null, plannedDrink);
     }
 
     @Override
@@ -10,7 +16,7 @@ public class CriticCustomer extends Customer {
 
     @Override
     protected int getWaitingLoss() {
-        return 12;
+        return WAITING_LOSS;
     }
 
     @Override
