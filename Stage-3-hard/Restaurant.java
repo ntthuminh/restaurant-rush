@@ -8,76 +8,86 @@ import java.util.Queue;
 
 public class Restaurant {
     public static final int MAX_TURNS = 18;
+    public static final int TABLE_COUNT = 2;
 
-    public enum Role { HOST, WAITER, CHEF, CASHIER }
+    public enum Role {
+        HOST("Host"), WAITER("Waiter"), CHEF("Chef"), BARTENDER("Bartender"), CASHIER("Cashier");
 
+        private final String label;
+
+        Role(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
+    private static final int BETWEEN_TURNS = -1;
+
+    private final GameMode mode;
+    private final List<Role> turnOrder;
     private final List<Customer> customers = new ArrayList<>();
     private final Queue<Customer> waitingQueue = new ArrayDeque<>();
     private final List<Table> tables = new ArrayList<>();
     private final Map<Role, Staff> staff = new EnumMap<>(Role.class);
     private final HappyHour happyHour = new HappyHour();
-    private final GameMode mode;
-    private int tipsCents;
+    private final ScoreBoard score = new ScoreBoard();
     private Customer lastPaid;
     private int turn;
-    private int revenueCents;
-    private int servedCount;
-    private int unhappyDepartures;
-    private int paidCount;
-    private int paidSatisfactionTotal;
-    private Phase phase = Phase.BETWEEN_TURNS;
-
-    private enum Phase { BETWEEN_TURNS, HOST, WAITER, CHEF, RESOLUTION }
-
-    public Restaurant() {
-        this(new NormalMode());
-    }
+    private int nextRole = BETWEEN_TURNS;
 
     public Restaurant(GameMode mode) {
-        require(mode != null, "Choose a game mode.");
+        Preconditions.check(mode != null, "Choose a game mode.");
         this.mode = mode;
-        tables.add(new Table(1));
-        tables.add(new Table(2));
-        staff.put(Role.WAITER, new Staff.Waiter());
-        staff.put(Role.CHEF, new Staff.Chef());
-        staff.put(Role.CASHIER, new Staff.Cashier());
-        staff.put(Role.HOST, new Staff.Host());
+        this.turnOrder = new ArrayList<>(mode.getManagerRoles());
+        for (int id = 1; id <= TABLE_COUNT; id++) {
+            tables.add(new Table(id));
+        }
+        for (Role role : turnOrder) {
+            staff.put(role, createStaff(role));
+        }
+        staff.put(Role.CASHIER, createStaff(Role.CASHIER));
     }
 
-    public int getTurn() {
-        return turn;
+    private static Staff createStaff(Role role) {
+        switch (role) {
+            case HOST:
+                return new Staff.Host();
+            case WAITER:
+                return new Staff.Waiter();
+            case CHEF:
+                return new Staff.Chef();
+            case BARTENDER:
+                return new Staff.Bartender();
+            default:
+                return new Staff.Cashier();
+        }
     }
 
     public GameMode getMode() {
         return mode;
     }
 
-    public int getTipsCents() {
-        return tipsCents;
+    public ScoreBoard getScore() {
+        return score;
+    }
+
+    public int getTurn() {
+        return turn;
+    }
+
+    public List<Role> getTurnOrder() {
+        return Collections.unmodifiableList(turnOrder);
+    }
+
+    public boolean hasRole(Role role) {
+        return staff.containsKey(role);
     }
 
     public Customer getLastPaid() {
         return lastPaid;
-    }
-
-    public int getRevenueCents() {
-        return revenueCents;
-    }
-
-    public int getServedCount() {
-        return servedCount;
-    }
-
-    public int getUnhappyDepartures() {
-        return unhappyDepartures;
-    }
-
-    public int getPaidCount() {
-        return paidCount;
-    }
-
-    public double getAverageSatisfaction() {
-        return paidCount == 0 ? 0.0 : (double) paidSatisfactionTotal / paidCount;
     }
 
     public List<Customer> getCustomers() {
@@ -93,51 +103,36 @@ public class Restaurant {
     }
 
     public boolean canActivateHappyHour() {
-        return phase == Phase.BETWEEN_TURNS && turn < MAX_TURNS && !happyHour.isUsed();
+        return nextRole == BETWEEN_TURNS && turn < MAX_TURNS && !happyHour.isUsed();
     }
 
     public int getHappyHourTurnsRemaining() {
         return happyHour.getTurnsRemaining();
     }
 
-    public void startTurn() {
-        startTurn(false);
-    }
-
     public void startTurn(boolean activateHappyHour) {
-        require(phase == Phase.BETWEEN_TURNS, "Finish the current turn first.");
-        require(turn < MAX_TURNS, "The game has finished.");
+        Preconditions.check(nextRole == BETWEEN_TURNS, "Finish the current turn first.");
+        Preconditions.check(turn < MAX_TURNS, "The game has finished.");
 
         happyHour.startTurn(activateHappyHour);
         turn++;
-        phase = Phase.HOST;
+        nextRole = 0;
 
         if ((turn - 1) % mode.getArrivalInterval() == 0) {
-            int id = customers.size() + 1;
-            Order.Meal plannedMeal = mode.planMeal(id);
-            Customer customer;
-
-            if (id == 2) {
-                customer = new VIPCustomer(id, happyHour, plannedMeal);
-            } else if (id == 3) {
-                customer = new CriticCustomer(id, happyHour);
-            } else {
-                customer = new Customer(id, happyHour, plannedMeal);
-            }
-
+            Customer customer = mode.createCustomer(customers.size() + 1, happyHour);
             customers.add(customer);
             waitingQueue.add(customer);
         }
 
         if (happyHour.isActive()) {
             for (Customer customer : customers) {
-                customer.recoverSatisfaction(15);
+                customer.recoverSatisfaction(HappyHour.SATISFACTION_RECOVERY);
             }
         }
     }
 
     public Staff.Task createTask(Staff.Action action, int customerId) {
-        require(action != null, "Choose a task.");
+        Preconditions.check(action != null, "Choose a task.");
         if (action == Staff.Action.WAIT) {
             return Staff.Task.waiting();
         }
@@ -149,19 +144,14 @@ public class Restaurant {
     }
 
     public void assignTask(Role role, Staff.Task task) {
-        require(task != null, "Choose a task.");
-        require(role == Role.HOST || role == Role.WAITER || role == Role.CHEF,
-                "Only the Host, Waiter and Chef take manager assignments.");
-        boolean hostTurn = role == Role.HOST && phase == Phase.HOST;
-        boolean waiterTurn = role == Role.WAITER && phase == Phase.WAITER;
-        boolean chefTurn = role == Role.CHEF && phase == Phase.CHEF;
-        require(hostTurn || waiterTurn || chefTurn,
-                "Staff must act in order: Host, Waiter, then Chef.");
+        Preconditions.check(task != null, "Choose a task.");
+        Preconditions.check(nextRole >= 0 && nextRole < turnOrder.size()
+                && turnOrder.get(nextRole) == role, "Staff must act in the turn order.");
         if (task.getCustomer() != null) {
-            require(customers.contains(task.getCustomer()), "That customer is not in this game.");
+            Preconditions.check(customers.contains(task.getCustomer()), "That customer is not in this game.");
         }
         if (task.getAction() == Staff.Action.SEAT && task.getTable() != null) {
-            require(tables.contains(task.getTable()), "That table is not in this restaurant.");
+            Preconditions.check(tables.contains(task.getTable()), "That table is not in this restaurant.");
         }
 
         staff.get(role).perform(task, turn);
@@ -169,46 +159,34 @@ public class Restaurant {
             waitingQueue.remove(task.getCustomer());
         }
         if (task.getAction() == Staff.Action.SERVE) {
-            servedCount++;
+            score.recordServe();
         }
-        if (role == Role.HOST) {
-            phase = Phase.WAITER;
-        } else if (role == Role.WAITER) {
-            phase = Phase.CHEF;
-        } else {
-            phase = Phase.RESOLUTION;
-        }
+        nextRole++;
     }
 
     public void finishTurn() {
-        require(phase == Phase.RESOLUTION, "All staff choices must be completed.");
+        Preconditions.check(nextRole == turnOrder.size(), "All staff choices must be completed.");
 
         for (Customer customer : customers) {
             customer.finishEating(turn);
         }
         collectPayment();
         updateWaitingCustomers();
-        phase = Phase.BETWEEN_TURNS;
+        nextRole = BETWEEN_TURNS;
     }
 
     private void collectPayment() {
         Customer customer = findOldestReadyToPay();
         lastPaid = customer;
-        Staff.Task task;
-        if (customer == null) {
-            task = Staff.Task.waiting();
-        } else {
-            task = Staff.Task.forCustomer(Staff.Action.PAY, customer);
-        }
+        Staff.Task task = customer == null
+                ? Staff.Task.waiting()
+                : Staff.Task.forCustomer(Staff.Action.PAY, customer);
 
         staff.get(Role.CASHIER).perform(task, turn);
 
         if (customer != null) {
-            int amount = mode.amountPaid(customer);
-            revenueCents += amount;
-            tipsCents += amount - customer.getOrder().getBillCents();
-            paidCount++;
-            paidSatisfactionTotal += customer.getSatisfaction();
+            score.recordPayment(mode.amountPaid(customer), customer.getOrder().getBillCents(),
+                    customer.getSatisfaction());
             releaseTable(customer);
         }
     }
@@ -221,17 +199,18 @@ public class Restaurant {
                     customer.leave();
                     waitingQueue.remove(customer);
                     releaseTable(customer);
-                    unhappyDepartures++;
+                    score.recordDeparture();
                 }
             }
         }
     }
 
+    public boolean isGameOver() {
+        return turn == MAX_TURNS && nextRole == BETWEEN_TURNS;
+    }
+
     public boolean isVictory() {
-        return turn == MAX_TURNS && phase == Phase.BETWEEN_TURNS
-                && paidCount >= mode.getTargetPaidCustomers()
-                && revenueCents >= mode.getTargetRevenueCents()
-                && paidSatisfactionTotal >= mode.getTargetAverageSatisfaction() * paidCount;
+        return isGameOver() && score.meetsTargets(mode);
     }
 
     public boolean canSeat() {
@@ -263,7 +242,7 @@ public class Restaurant {
                 return customer;
             }
         }
-        throw new IllegalArgumentException("That customer does not exist.");
+        throw new InvalidActionException("That customer does not exist.");
     }
 
     private Table findFreeTable() {
@@ -281,12 +260,10 @@ public class Restaurant {
             if (customer.getStatus() != Customer.Status.READY_TO_PAY) {
                 continue;
             }
-
             int readyTurn = customer.getOrder().getReadyToPayTurn();
             if (readyTurn >= turn) {
                 continue;
             }
-
             if (oldest == null) {
                 oldest = customer;
             } else {
@@ -308,48 +285,6 @@ public class Restaurant {
                 table.release();
                 return;
             }
-        }
-    }
-
-    public static final class HappyHour {
-        private boolean used;
-        private int turnsRemaining;
-
-        private void startTurn(boolean activate) {
-            require(!activate || !used, "Happy Hour can only be activated once.");
-
-            if (turnsRemaining > 0) {
-                turnsRemaining--;
-            }
-            if (activate) {
-                used = true;
-                turnsRemaining = 2;
-            }
-        }
-
-        public boolean isUsed() {
-            return used;
-        }
-
-        public boolean isActive() {
-            return turnsRemaining > 0;
-        }
-
-        public int getTurnsRemaining() {
-            return turnsRemaining;
-        }
-
-        public int applyToBill(int billCents) {
-            if (isActive()) {
-                return (int) ((billCents * 80L + 50) / 100);
-            }
-            return billCents;
-        }
-    }
-
-    static void require(boolean condition, String message) {
-        if (!condition) {
-            throw new IllegalArgumentException(message);
         }
     }
 }

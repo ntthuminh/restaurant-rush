@@ -1,82 +1,63 @@
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.OptionalInt;
 
 public class RestaurantRushApp {
-    private final Restaurant restaurant;
+    private static final Staff.Action[] WAITER_ACTIONS = {
+            Staff.Action.WAIT, Staff.Action.SEAT, Staff.Action.TAKE_ORDER, Staff.Action.SERVE
+    };
+
     private final InputSource input;
+    private Restaurant restaurant;
 
     public RestaurantRushApp(InputSource input) {
-        this(input, new NormalMode());
-    }
-
-    public RestaurantRushApp(InputSource input, GameMode mode) {
         this.input = input;
-        this.restaurant = new Restaurant(mode);
     }
 
     public static void main(String[] args) {
-        GameMode mode = new NormalMode();
-        String recordFile = null;
-        String replayFile = null;
-        try {
-            for (int i = 0; i < args.length; i++) {
-                if (args[i].equals("--hard")) {
-                    mode = new HardMode();
-                } else if (args[i].equals("--record") && i + 1 < args.length) {
-                    recordFile = args[++i];
-                } else if (args[i].equals("--replay") && i + 1 < args.length) {
-                    replayFile = args[++i];
-                } else {
-                    printUsage();
-                    return;
-                }
-            }
-            if (recordFile != null && replayFile != null) {
-                printUsage();
-                return;
-            }
-
-            InputSource input;
-            if (replayFile != null) {
-                ReplayInput replay = new ReplayInput(Paths.get(replayFile));
-                if (replay.getSettingsLine() != null) {
-                    mode = GameMode.fromSettingsLine(replay.getSettingsLine());
-                }
-                input = replay;
-                System.out.println("REPLAY of " + replayFile);
-            } else if (recordFile != null) {
-                input = new RecordingInput(new ConsoleInput(), Paths.get(recordFile),
-                        mode.getSettingsLine());
-                System.out.println("Recording choices to " + recordFile);
-            } else {
-                input = new ConsoleInput();
-            }
-            new RestaurantRushApp(input, mode).run();
+        if (args.length != 0 && !(args.length == 2
+                && (args[0].equals("--record") || args[0].equals("--replay")))) {
+            System.out.println("Usage: java RestaurantRushApp [--record FILE | --replay FILE]");
+            return;
+        }
+        try (InputSource input = openInput(args)) {
+            new RestaurantRushApp(input).run();
         } catch (IOException exception) {
             System.out.println("Cannot use that file: " + exception.getMessage());
-        } catch (IllegalArgumentException exception) {
-            System.out.println("Cannot start: " + exception.getMessage());
         }
     }
 
-    private static void printUsage() {
-        System.out.println("Usage: java RestaurantRushApp [--hard]"
-                + " [--record FILE | --replay FILE]");
+    private static InputSource openInput(String[] args) throws IOException {
+        if (args.length == 0) {
+            return new ConsoleInput();
+        }
+        if (args[0].equals("--record")) {
+            System.out.println("Recording choices to " + args[1]);
+            return new RecordingInput(new ConsoleInput(), Paths.get(args[1]));
+        }
+        InputSource replay = new ReplayInput(Paths.get(args[1]));
+        System.out.println("REPLAY of " + args[1]);
+        return replay;
     }
 
     public void run() {
+        GameMode mode = chooseMode();
+        if (mode == null) {
+            System.out.println("\nInput closed. Game stopped before completion.");
+            return;
+        }
+        restaurant = new Restaurant(mode);
         displayWelcome();
         while (restaurant.getTurn() < Restaurant.MAX_TURNS) {
-            Integer happyHourChoice = chooseHappyHour();
-            if (happyHourChoice == null) {
+            OptionalInt happyHourChoice = chooseHappyHour();
+            if (!happyHourChoice.isPresent()) {
                 System.out.println("\nInput closed. Game stopped before completion.");
                 return;
             }
-            restaurant.startTurn(happyHourChoice == 1);
+            restaurant.startTurn(happyHourChoice.getAsInt() == 1);
             displayState();
             if (!readManagerChoices()) {
                 System.out.println("\nInput closed. Game stopped before completion.");
@@ -88,32 +69,70 @@ public class RestaurantRushApp {
         displayResult();
     }
 
+    private GameMode chooseMode() {
+        System.out.println("RESTAURANT RUSH");
+        System.out.println("1. Normal - the Stage 3 game");
+        System.out.println("2. Hard - a customer every 2 turns, drinks made by a Bartender, and tips");
+        while (true) {
+            OptionalInt choice = readInt("Choose a mode [1 normal, 2 hard]: ");
+            if (!choice.isPresent()) {
+                return null;
+            }
+            if (choice.getAsInt() == 1) {
+                System.out.println();
+                return new NormalMode();
+            }
+            if (choice.getAsInt() == 2) {
+                System.out.println();
+                return new HardMode();
+            }
+            System.out.println("Invalid: choose 1 or 2.");
+        }
+    }
+
     private void displayWelcome() {
         GameMode mode = restaurant.getMode();
         System.out.println(mode.getTitle());
         System.out.printf("Goal: %d paid customers, %s revenue, %d average satisfaction.%n",
                 mode.getTargetPaidCustomers(), money(mode.getTargetRevenueCents()),
                 mode.getTargetAverageSatisfaction());
-        System.out.println("18 turns | 2 tables | 1 Host | 1 Waiter | 1 Chef | 1 Cashier");
+        StringBuilder setup = new StringBuilder();
+        setup.append(Restaurant.MAX_TURNS).append(" turns | ")
+                .append(Restaurant.TABLE_COUNT).append(" tables");
+        for (Restaurant.Role role : Restaurant.Role.values()) {
+            if (restaurant.hasRole(role)) {
+                setup.append(" | 1 ").append(role.getLabel());
+            }
+        }
+        System.out.println(setup);
         for (Order.MenuItem item : Order.MenuItem.values()) {
             System.out.printf("%s: %s (%d preparation unit(s))%n",
                     item.getName(), money(item.getPriceCents()), item.getPreparationUnits());
         }
+        for (Order.Drink drink : mode.getDrinks()) {
+            System.out.printf("%s: %s (%d preparation unit(s))%n",
+                    drink.getName(), money(drink.getPriceCents()), drink.getPreparationUnits());
+        }
         for (String line : mode.getRuleLines()) {
             System.out.println(line);
         }
-        System.out.println("Waiting loss: Regular 8, VIP 5, Critic 12. VIP bills get 10% off.");
-        System.out.println("Happy Hour: activate once, lasting this turn and the next.");
-        System.out.println("Active turns: 20% off new orders, +15 waiting satisfaction (maximum 100).");
+        System.out.printf("Waiting loss: Regular %d, VIP %d, Critic %d. VIP bills get %d%% off.%n",
+                Customer.WAITING_LOSS, VIPCustomer.WAITING_LOSS, CriticCustomer.WAITING_LOSS,
+                VIPCustomer.DISCOUNT_PERCENT);
+        System.out.printf("Happy Hour: activate once, lasting %s.%n",
+                HappyHour.DURATION_TURNS == 2 ? "this turn and the next"
+                        : HappyHour.DURATION_TURNS + " turns");
+        System.out.printf("Active turns: %d%% off new orders, +%d waiting satisfaction (maximum %d).%n",
+                HappyHour.DISCOUNT_PERCENT, HappyHour.SATISFACTION_RECOVERY, Customer.MAX_SATISFACTION);
         System.out.println("The Host acts before the Waiter. Both can seat customers.");
         System.out.println("Enter customer numbers: for C1, enter 1.");
     }
 
     private void displayState() {
+        ScoreBoard score = restaurant.getScore();
         System.out.println();
         System.out.printf("TURN %d/%d | Revenue %s | Paid avg %s%n",
-                restaurant.getTurn(), Restaurant.MAX_TURNS,
-                money(restaurant.getRevenueCents()), average());
+                restaurant.getTurn(), Restaurant.MAX_TURNS, money(score.getRevenueCents()), average());
         System.out.println("Happy Hour: " + restaurant.getHappyHourTurnsRemaining()
                 + " turn(s) remaining");
         List<String> queue = new ArrayList<>();
@@ -133,170 +152,165 @@ public class RestaurantRushApp {
                         + " satisfaction=" + customer.getSatisfaction() + " order=" + order);
             }
         }
-        System.out.println("Host available: " + (restaurant.canSeat() ? "seat / wait" : "wait"));
-        System.out.println("Waiter available: " + waiterOptions());
-        System.out.println("Chef available: " + chefOptions());
+        for (Restaurant.Role role : restaurant.getTurnOrder()) {
+            System.out.println(role.getLabel() + " available: " + optionsFor(role));
+        }
         System.out.println("Cashier: automatic, at most one eligible payment");
     }
 
-    private Integer chooseHappyHour() {
+    private OptionalInt chooseHappyHour() {
         if (!restaurant.canActivateHappyHour()) {
-            return 0;
+            return OptionalInt.of(0);
         }
-
         while (true) {
-            Integer choice = readInt("Start turn " + (restaurant.getTurn() + 1)
+            OptionalInt choice = readInt("Start turn " + (restaurant.getTurn() + 1)
                     + " - activate Happy Hour? [1 yes, 0 no]: ");
-            if (choice == null || choice == 0 || choice == 1) {
+            if (!choice.isPresent() || choice.getAsInt() == 0 || choice.getAsInt() == 1) {
                 return choice;
             }
             System.out.println("Invalid: choose 0 or 1.");
         }
     }
 
-    private boolean chooseHostTask() {
-        while (true) {
-            Integer id = readInt("Host [customer number to seat, 0 wait]: ");
-            if (id == null) {
-                return false;
-            }
-
-            Staff.Action action = Staff.Action.SEAT;
-            if (id == 0) {
-                action = Staff.Action.WAIT;
-            }
-
-            try {
-                Staff.Task task = restaurant.createTask(action, id);
-                restaurant.assignTask(Restaurant.Role.HOST, task);
-                if (id != 0) {
-                    System.out.println("Host seated C" + id + ".");
-                }
-                return true;
-            } catch (IllegalArgumentException exception) {
-                System.out.println("Invalid: " + exception.getMessage());
-            }
-        }
-    }
-
     private boolean readManagerChoices() {
-        if (!chooseHostTask()) {
-            return false;
-        }
-        System.out.println("Waiter available: " + waiterOptions());
-        if (!chooseWaiterTask()) {
-            return false;
-        }
-        System.out.println("Chef available: " + chefOptions());
-        return chooseChefTask();
-    }
-
-    private boolean chooseWaiterTask() {
-        while (true) {
-            Integer choice = readInt("Waiter [1 seat, 2 take order, 3 serve, 0 wait]: ");
-            if (choice == null) {
+        List<Restaurant.Role> order = restaurant.getTurnOrder();
+        for (int i = 0; i < order.size(); i++) {
+            Restaurant.Role role = order.get(i);
+            if (i > 0) {
+                System.out.println(role.getLabel() + " available: " + optionsFor(role));
+            }
+            if (!chooseTask(role)) {
                 return false;
             }
-            if (choice < 0 || choice > 3) {
-                System.out.println("Invalid: choose 0, 1, 2 or 3.");
-                continue;
-            }
-            Integer id = 0;
-            if (choice != 0) {
-                id = readInt("Customer number: ");
-                if (id == null) {
-                    return false;
-                }
-            }
+        }
+        return true;
+    }
 
+    private boolean chooseTask(Restaurant.Role role) {
+        while (true) {
+            OptionalInt first = readInt(promptFor(role));
+            if (!first.isPresent()) {
+                return false;
+            }
             Staff.Action action;
-            switch (choice) {
-                case 1:
-                    action = Staff.Action.SEAT;
-                    break;
-                case 2:
-                    action = Staff.Action.TAKE_ORDER;
-                    break;
-                case 3:
-                    action = Staff.Action.SERVE;
-                    break;
-                default:
-                    action = Staff.Action.WAIT;
-            }
-            try {
-                Staff.Task task = restaurant.createTask(action, id);
-                restaurant.assignTask(Restaurant.Role.WAITER, task);
-                if (action == Staff.Action.SEAT) {
-                    System.out.println("Seated C" + id + ".");
-                } else if (action == Staff.Action.TAKE_ORDER) {
-                    Order order = task.getCustomer().getOrder();
-                    System.out.println("C" + id + " ordered " + order.getItem().getName()
-                            + " (" + money(order.getBillCents()) + ", "
-                            + order.getItem().getPreparationUnits() + " unit(s)).");
-                } else if (action == Staff.Action.SERVE) {
-                    System.out.println("Served C" + id + ".");
+            int customerId;
+            if (role == Restaurant.Role.WAITER) {
+                int choice = first.getAsInt();
+                if (choice < 0 || choice >= WAITER_ACTIONS.length) {
+                    System.out.println("Invalid: choose 0, 1, 2 or 3.");
+                    continue;
                 }
+                action = WAITER_ACTIONS[choice];
+                customerId = 0;
+                if (action != Staff.Action.WAIT) {
+                    OptionalInt id = readInt("Customer number: ");
+                    if (!id.isPresent()) {
+                        return false;
+                    }
+                    customerId = id.getAsInt();
+                }
+            } else {
+                customerId = first.getAsInt();
+                action = customerId == 0 ? Staff.Action.WAIT : actionFor(role);
+            }
+
+            try {
+                Staff.Task task = restaurant.createTask(action, customerId);
+                restaurant.assignTask(role, task);
+                printResult(role, task);
                 return true;
-            } catch (IllegalArgumentException exception) {
+            } catch (InvalidActionException exception) {
                 System.out.println("Invalid: " + exception.getMessage());
             }
         }
     }
 
-    private boolean chooseChefTask() {
-        while (true) {
-            Integer id = readInt("Chef [customer number to prepare, 0 wait]: ");
-            if (id == null) {
-                return false;
-            }
-            try {
-                Staff.Action action;
-                if (id == 0) {
-                    action = Staff.Action.WAIT;
-                } else {
-                    action = Staff.Action.PREPARE;
-                }
-
-                Staff.Task task = restaurant.createTask(action, id);
-                restaurant.assignTask(Restaurant.Role.CHEF, task);
-                if (id != 0) {
-                    System.out.println("C" + id + ": "
-                            + task.getCustomer().getOrder().getDescription());
-                }
-                return true;
-            } catch (IllegalArgumentException exception) {
-                System.out.println("Invalid: " + exception.getMessage());
-            }
+    private String promptFor(Restaurant.Role role) {
+        switch (role) {
+            case HOST:
+                return "Host [customer number to seat, 0 wait]: ";
+            case WAITER:
+                return "Waiter [1 seat, 2 take order, 3 serve, 0 wait]: ";
+            case CHEF:
+                return "Chef [customer number to prepare, 0 wait]: ";
+            default:
+                return "Bartender [customer number to make a drink, 0 wait]: ";
         }
     }
 
-    private String waiterOptions() {
-        List<String> actions = new ArrayList<>();
-        if (restaurant.canSeat()) {
-            actions.add("seat");
+    private Staff.Action actionFor(Restaurant.Role role) {
+        switch (role) {
+            case HOST:
+                return Staff.Action.SEAT;
+            case CHEF:
+                return Staff.Action.PREPARE;
+            default:
+                return Staff.Action.MIX_DRINK;
         }
-        if (restaurant.canTakeOrder()) {
-            actions.add("take order");
-        }
-        if (restaurant.canServe()) {
-            actions.add("serve");
-        }
-        actions.add("wait");
-        return String.join(" / ", actions);
     }
 
-    private String chefOptions() {
-        List<String> labels = new ArrayList<>();
-        for (Customer customer : restaurant.getCustomers()) {
-            if (customer.getOrder() != null
-                    && customer.getOrder().getStatus() == Order.Status.PREPARING) {
-                labels.add(customer.getLabel());
-            }
+    private void printResult(Restaurant.Role role, Staff.Task task) {
+        Customer customer = task.getCustomer();
+        switch (task.getAction()) {
+            case SEAT:
+                System.out.println((role == Restaurant.Role.HOST ? "Host seated C" : "Seated C")
+                        + customer.getId() + ".");
+                break;
+            case TAKE_ORDER:
+                Order order = customer.getOrder();
+                String units = String.valueOf(order.getItem().getPreparationUnits());
+                if (order.getDrink() != null) {
+                    units += " + " + order.getDrink().getPreparationUnits();
+                }
+                System.out.println("C" + customer.getId() + " ordered " + order.getName()
+                        + " (" + money(order.getBillCents()) + ", " + units + " unit(s)).");
+                break;
+            case SERVE:
+                System.out.println("Served C" + customer.getId() + ".");
+                break;
+            case PREPARE:
+            case MIX_DRINK:
+                System.out.println("C" + customer.getId() + ": " + customer.getOrder().getDescription());
+                break;
+            default:
+                break;
         }
-        return labels.isEmpty() ? "wait" : "prepare " + String.join(", ", labels) + " / wait";
+    }
+
+    private String optionsFor(Restaurant.Role role) {
+        switch (role) {
+            case HOST:
+                return restaurant.canSeat() ? "seat / wait" : "wait";
+            case WAITER:
+                List<String> actions = new ArrayList<>();
+                if (restaurant.canSeat()) {
+                    actions.add("seat");
+                }
+                if (restaurant.canTakeOrder()) {
+                    actions.add("take order");
+                }
+                if (restaurant.canServe()) {
+                    actions.add("serve");
+                }
+                actions.add("wait");
+                return String.join(" / ", actions);
+            default:
+                List<String> labels = new ArrayList<>();
+                for (Customer customer : restaurant.getCustomers()) {
+                    Order order = customer.getOrder();
+                    boolean needsWork = order != null && (role == Restaurant.Role.CHEF
+                            ? order.needsCooking() : order.needsMixing());
+                    if (needsWork) {
+                        labels.add(customer.getLabel());
+                    }
+                }
+                String verb = role == Restaurant.Role.CHEF ? "prepare " : "make drink ";
+                return labels.isEmpty() ? "wait" : verb + String.join(", ", labels) + " / wait";
+        }
     }
 
     private void displayTurnSummary() {
+        ScoreBoard score = restaurant.getScore();
         Customer paid = restaurant.getLastPaid();
         if (restaurant.getMode().getTipCentsPerPoint() > 0 && paid != null) {
             int bill = paid.getOrder().getBillCents();
@@ -306,38 +320,37 @@ public class RestaurantRushApp {
         }
         System.out.printf("End %d | Served %d | Unhappy departures %d"
                         + " | Revenue %s | Paid avg %s | Turns used %d%n",
-                restaurant.getTurn(), restaurant.getServedCount(),
-                restaurant.getUnhappyDepartures(), money(restaurant.getRevenueCents()),
-                average(), restaurant.getTurn());
+                restaurant.getTurn(), score.getServedCount(), score.getUnhappyDepartures(),
+                money(score.getRevenueCents()), average(), restaurant.getTurn());
     }
 
     private void displayResult() {
-        if (restaurant.isVictory()) {
-            System.out.println("\nVICTORY");
-        } else {
-            System.out.println("\nDEFEAT");
-        }
+        ScoreBoard score = restaurant.getScore();
         GameMode mode = restaurant.getMode();
+        System.out.println(restaurant.isVictory() ? "\nVICTORY" : "\nDEFEAT");
         System.out.printf("Paid customers: %d / target %d%n",
-                restaurant.getPaidCount(), mode.getTargetPaidCustomers());
+                score.getPaidCount(), mode.getTargetPaidCustomers());
         System.out.printf("Revenue: %s / target %s%n",
-                money(restaurant.getRevenueCents()), money(mode.getTargetRevenueCents()));
+                money(score.getRevenueCents()), money(mode.getTargetRevenueCents()));
         if (mode.getTipCentsPerPoint() > 0) {
-            System.out.println("  of which tips: " + money(restaurant.getTipsCents()));
+            System.out.println("  of which tips: " + money(score.getTipsCents()));
         }
         System.out.printf("Paid average satisfaction: %s / target %d%n",
                 average(), mode.getTargetAverageSatisfaction());
     }
 
-    private Integer readInt(String prompt) {
+    private OptionalInt readInt(String prompt) {
         while (true) {
             System.out.print(prompt);
             String line = input.readLine();
             if (line == null) {
-                return null;
+                return OptionalInt.empty();
+            }
+            if (input.echoesInput()) {
+                System.out.println(line);
             }
             try {
-                return Integer.parseInt(line.trim());
+                return OptionalInt.of(Integer.parseInt(line.trim()));
             } catch (NumberFormatException exception) {
                 System.out.println("Invalid: enter a whole number.");
             }
@@ -345,10 +358,10 @@ public class RestaurantRushApp {
     }
 
     private String average() {
-        if (restaurant.getPaidCount() == 0) {
+        if (restaurant.getScore().getPaidCount() == 0) {
             return "N/A";
         }
-        return String.format(Locale.ROOT, "%.1f", restaurant.getAverageSatisfaction());
+        return String.format(Locale.ROOT, "%.1f", restaurant.getScore().getAverageSatisfaction());
     }
 
     private String money(int cents) {

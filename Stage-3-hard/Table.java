@@ -19,7 +19,7 @@ public class Table {
     }
 
     public void seat(Customer customer) {
-        Restaurant.require(isFree(), "That table is occupied.");
+        Preconditions.check(isFree(), "That table is occupied.");
         customer.seat();
         this.customer = customer;
     }
@@ -30,7 +30,7 @@ public class Table {
         }
         Customer.Status status = customer.getStatus();
         boolean canLeave = status == Customer.Status.PAID || status == Customer.Status.LEFT;
-        Restaurant.require(canLeave,
+        Preconditions.check(canLeave,
                 "A table remains occupied until payment or abandonment.");
         customer = null;
     }

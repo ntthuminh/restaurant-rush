@@ -8,11 +8,9 @@ public class RecordingInput implements InputSource {
     private final InputSource source;
     private final PrintWriter file;
 
-    public RecordingInput(InputSource source, Path path, String headerLine) throws IOException {
+    public RecordingInput(InputSource source, Path path) throws IOException {
         this.source = source;
         this.file = new PrintWriter(Files.newBufferedWriter(path, StandardCharsets.UTF_8));
-        file.println(headerLine);
-        file.flush();
     }
 
     @Override
@@ -23,5 +21,11 @@ public class RecordingInput implements InputSource {
             file.flush();
         }
         return line;
+    }
+
+    @Override
+    public void close() {
+        file.close();
+        source.close();
     }
 }
