@@ -38,7 +38,7 @@ public class NormalMode extends GameMode {
     }
 
     @Override
-    public String getSettingsLine() {
-        return "#mode normal";
+    public String getName() {
+        return "Normal";
     }
 }

@@ -70,7 +70,7 @@ public class RestaurantRushApp {
     }
 
     private GameMode chooseMode() {
-        System.out.println("RESTAURANT RUSH");
+        printHeading("RESTAURANT RUSH");
         System.out.println("1. Normal - the Stage 3 game");
         System.out.println("2. Hard - a customer every 2 turns, drinks made by a Bartender, and tips");
         while (true) {
@@ -92,7 +92,7 @@ public class RestaurantRushApp {
 
     private void displayWelcome() {
         GameMode mode = restaurant.getMode();
-        System.out.println(mode.getTitle());
+        printHeading(mode.getTitle());
         System.out.printf("Goal: %d paid customers, %s revenue, %d average satisfaction.%n",
                 mode.getTargetPaidCustomers(), money(mode.getTargetRevenueCents()),
                 mode.getTargetAverageSatisfaction());
@@ -105,14 +105,16 @@ public class RestaurantRushApp {
             }
         }
         System.out.println(setup);
+        System.out.println("\nMENU");
         for (Order.MenuItem item : Order.MenuItem.values()) {
-            System.out.printf("%s: %s (%d preparation unit(s))%n",
+            System.out.printf("  %-10s %s (%d preparation unit(s))%n",
                     item.getName(), money(item.getPriceCents()), item.getPreparationUnits());
         }
         for (Order.Drink drink : mode.getDrinks()) {
-            System.out.printf("%s: %s (%d preparation unit(s))%n",
+            System.out.printf("  %-10s %s (%d preparation unit(s))%n",
                     drink.getName(), money(drink.getPriceCents()), drink.getPreparationUnits());
         }
+        System.out.println("\nCUSTOMERS AND RULES");
         for (String line : mode.getRuleLines()) {
             System.out.println(line);
         }
@@ -124,38 +126,47 @@ public class RestaurantRushApp {
                         : HappyHour.DURATION_TURNS + " turns");
         System.out.printf("Active turns: %d%% off new orders, +%d waiting satisfaction (maximum %d).%n",
                 HappyHour.DISCOUNT_PERCENT, HappyHour.SATISFACTION_RECOVERY, Customer.MAX_SATISFACTION);
+        System.out.println("\nCONTROLS");
         System.out.println("The Host acts before the Waiter. Both can seat customers.");
         System.out.println("Enter customer numbers: for C1, enter 1.");
     }
 
     private void displayState() {
         ScoreBoard score = restaurant.getScore();
-        System.out.println();
-        System.out.printf("TURN %d/%d | Revenue %s | Paid avg %s%n",
-                restaurant.getTurn(), Restaurant.MAX_TURNS, money(score.getRevenueCents()), average());
+        printHeading("TURN " + restaurant.getTurn() + " / " + Restaurant.MAX_TURNS);
+        System.out.printf("Revenue: %s    Paid average satisfaction: %s%n",
+                money(score.getRevenueCents()), average());
         System.out.println("Happy Hour: " + restaurant.getHappyHourTurnsRemaining()
                 + " turn(s) remaining");
-        List<String> queue = new ArrayList<>();
-        for (Customer customer : restaurant.getWaitingQueue()) {
-            queue.add(customer.getLabel() + " satisfaction="
-                    + customer.getSatisfaction() + " order=NONE");
+
+        System.out.println("\nQUEUE");
+        if (restaurant.getWaitingQueue().isEmpty()) {
+            System.out.println("  Empty");
         }
-        System.out.println("Queue: " + (queue.isEmpty() ? "-" : String.join(" | ", queue)));
+        for (Customer customer : restaurant.getWaitingQueue()) {
+            System.out.println("  " + customer.getLabel() + " | Satisfaction: "
+                    + customer.getSatisfaction() + " | Order: NONE");
+        }
+
+        System.out.println("\nTABLES");
         for (Table table : restaurant.getTables()) {
             Customer customer = table.getCustomer();
             if (table.isFree()) {
-                System.out.println("Table " + table.getId() + ": FREE");
+                System.out.println("  Table " + table.getId() + ": FREE");
             } else {
                 String order = customer.getOrder() == null
                         ? "NONE" : customer.getOrder().getDescription();
-                System.out.println("Table " + table.getId() + ": " + customer.getLabel()
-                        + " satisfaction=" + customer.getSatisfaction() + " order=" + order);
+                System.out.println("  Table " + table.getId() + ": " + customer.getLabel()
+                        + " | Satisfaction: " + customer.getSatisfaction());
+                System.out.println("    Order: " + order);
             }
         }
+
+        System.out.println("\nSTAFF AVAILABILITY");
         for (Restaurant.Role role : restaurant.getTurnOrder()) {
-            System.out.println(role.getLabel() + " available: " + optionsFor(role));
+            System.out.printf("  %-10s %s%n", role.getLabel() + ":", optionsFor(role));
         }
-        System.out.println("Cashier: automatic, at most one eligible payment");
+        System.out.printf("  %-10s %s%n", "Cashier:", "automatic, at most one eligible payment");
     }
 
     private OptionalInt chooseHappyHour() {
@@ -163,7 +174,7 @@ public class RestaurantRushApp {
             return OptionalInt.of(0);
         }
         while (true) {
-            OptionalInt choice = readInt("Start turn " + (restaurant.getTurn() + 1)
+            OptionalInt choice = readInt("\nStart turn " + (restaurant.getTurn() + 1)
                     + " - activate Happy Hour? [1 yes, 0 no]: ");
             if (!choice.isPresent() || choice.getAsInt() == 0 || choice.getAsInt() == 1) {
                 return choice;
@@ -176,8 +187,9 @@ public class RestaurantRushApp {
         List<Restaurant.Role> order = restaurant.getTurnOrder();
         for (int i = 0; i < order.size(); i++) {
             Restaurant.Role role = order.get(i);
+            System.out.println("\n--- " + role.getLabel() + " ---");
             if (i > 0) {
-                System.out.println(role.getLabel() + " available: " + optionsFor(role));
+                System.out.println("Available: " + optionsFor(role));
             }
             if (!chooseTask(role)) {
                 return false;
@@ -310,6 +322,7 @@ public class RestaurantRushApp {
     }
 
     private void displayTurnSummary() {
+        System.out.println("\n------------------------------------------------------------");
         ScoreBoard score = restaurant.getScore();
         Customer paid = restaurant.getLastPaid();
         if (restaurant.getMode().getTipCentsPerPoint() > 0 && paid != null) {
@@ -318,16 +331,17 @@ public class RestaurantRushApp {
             System.out.println(paid.getLabel() + " paid " + money(bill) + " + tip " + money(tip)
                     + " (satisfaction " + paid.getSatisfaction() + ")");
         }
-        System.out.printf("End %d | Served %d | Unhappy departures %d"
-                        + " | Revenue %s | Paid avg %s | Turns used %d%n",
+        System.out.printf("END OF TURN %d - TOTALS%nServed: %d    Unhappy departures: %d"
+                        + "%nRevenue: %s    Paid average satisfaction: %s%nTurns used: %d%n",
                 restaurant.getTurn(), score.getServedCount(), score.getUnhappyDepartures(),
                 money(score.getRevenueCents()), average(), restaurant.getTurn());
+        System.out.println("------------------------------------------------------------");
     }
 
     private void displayResult() {
         ScoreBoard score = restaurant.getScore();
         GameMode mode = restaurant.getMode();
-        System.out.println(restaurant.isVictory() ? "\nVICTORY" : "\nDEFEAT");
+        printHeading(restaurant.isVictory() ? "VICTORY" : "DEFEAT");
         System.out.printf("Paid customers: %d / target %d%n",
                 score.getPaidCount(), mode.getTargetPaidCustomers());
         System.out.printf("Revenue: %s / target %s%n",
@@ -355,6 +369,12 @@ public class RestaurantRushApp {
                 System.out.println("Invalid: enter a whole number.");
             }
         }
+    }
+
+    private void printHeading(String title) {
+        System.out.println("\n============================================================");
+        System.out.println(title);
+        System.out.println("============================================================");
     }
 
     private String average() {

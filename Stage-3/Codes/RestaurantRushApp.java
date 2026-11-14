@@ -33,15 +33,17 @@ public class RestaurantRushApp {
     }
 
     private void displayWelcome() {
-        System.out.println("RESTAURANT RUSH - STAGE 3");
+        printHeading("RESTAURANT RUSH - STAGE 3");
         System.out.printf("Goal: %d paid customers, %s revenue, %d average satisfaction.%n",
                 Restaurant.TARGET_PAID_CUSTOMERS, money(Restaurant.TARGET_REVENUE_CENTS),
                 Restaurant.TARGET_AVERAGE_SATISFACTION);
         System.out.println("18 turns | 2 tables | 1 Host | 1 Waiter | 1 Chef | 1 Cashier");
+        System.out.println("\nMENU");
         for (Order.MenuItem item : Order.MenuItem.values()) {
-            System.out.printf("%s: %s (%d preparation unit(s))%n",
+            System.out.printf("  %-10s %s (%d preparation unit(s))%n",
                     item.getName(), money(item.getPriceCents()), item.getPreparationUnits());
         }
+        System.out.println("\nCUSTOMERS AND RULES");
         System.out.println("C2 is a VIP. C3 is a Critic. The other arrivals are Regular.");
         System.out.println("Regular/VIP IDs divisible by 4 choose a Salad + Pasta combo.");
         System.out.println("Other Regular/VIP choices repeat by ID: Salad, Burger, Pasta.");
@@ -50,38 +52,46 @@ public class RestaurantRushApp {
         System.out.println("Waiting loss: Regular 8, VIP 5, Critic 12. VIP bills get 10% off.");
         System.out.println("Happy Hour: activate once, lasting this turn and the next.");
         System.out.println("Active turns: 20% off new orders, +15 waiting satisfaction (maximum 100).");
+        System.out.println("\nCONTROLS");
         System.out.println("The Host acts before the Waiter. Both can seat customers.");
         System.out.println("Enter customer numbers: for C1, enter 1.");
     }
 
     private void displayState() {
-        System.out.println();
-        System.out.printf("TURN %d/%d | Revenue %s | Paid avg %s%n",
-                restaurant.getTurn(), Restaurant.MAX_TURNS,
+        printHeading("TURN " + restaurant.getTurn() + " / " + Restaurant.MAX_TURNS);
+        System.out.printf("Revenue: %s    Paid average satisfaction: %s%n",
                 money(restaurant.getRevenueCents()), average());
         System.out.println("Happy Hour: " + restaurant.getHappyHourTurnsRemaining()
                 + " turn(s) remaining");
-        List<String> queue = new ArrayList<>();
-        for (Customer customer : restaurant.getWaitingQueue()) {
-            queue.add(customer.getLabel() + " satisfaction="
-                    + customer.getSatisfaction() + " order=NONE");
+
+        System.out.println("\nQUEUE");
+        if (restaurant.getWaitingQueue().isEmpty()) {
+            System.out.println("  Empty");
         }
-        System.out.println("Queue: " + (queue.isEmpty() ? "-" : String.join(" | ", queue)));
+        for (Customer customer : restaurant.getWaitingQueue()) {
+            System.out.println("  " + customer.getLabel() + " | Satisfaction: "
+                    + customer.getSatisfaction() + " | Order: NONE");
+        }
+
+        System.out.println("\nTABLES");
         for (Table table : restaurant.getTables()) {
             Customer customer = table.getCustomer();
             if (table.isFree()) {
-                System.out.println("Table " + table.getId() + ": FREE");
+                System.out.println("  Table " + table.getId() + ": FREE");
             } else {
                 String order = customer.getOrder() == null
                         ? "NONE" : customer.getOrder().getDescription();
-                System.out.println("Table " + table.getId() + ": " + customer.getLabel()
-                        + " satisfaction=" + customer.getSatisfaction() + " order=" + order);
+                System.out.println("  Table " + table.getId() + ": " + customer.getLabel()
+                        + " | Satisfaction: " + customer.getSatisfaction());
+                System.out.println("    Order: " + order);
             }
         }
-        System.out.println("Host available: " + (restaurant.canSeat() ? "seat / wait" : "wait"));
-        System.out.println("Waiter available: " + waiterOptions());
-        System.out.println("Chef available: " + chefOptions());
-        System.out.println("Cashier: automatic, at most one eligible payment");
+
+        System.out.println("\nSTAFF AVAILABILITY");
+        System.out.println("  Host:    " + (restaurant.canSeat() ? "seat / wait" : "wait"));
+        System.out.println("  Waiter:  " + waiterOptions());
+        System.out.println("  Chef:    " + chefOptions());
+        System.out.println("  Cashier: automatic, at most one eligible payment");
     }
 
     private Integer chooseHappyHour() {
@@ -90,7 +100,7 @@ public class RestaurantRushApp {
         }
 
         while (true) {
-            Integer choice = readInt("Start turn " + (restaurant.getTurn() + 1)
+            Integer choice = readInt("\nStart turn " + (restaurant.getTurn() + 1)
                     + " - activate Happy Hour? [1 yes, 0 no]: ");
             if (choice == null || choice == 0 || choice == 1) {
                 return choice;
@@ -125,14 +135,17 @@ public class RestaurantRushApp {
     }
 
     private boolean readManagerChoices() {
+        System.out.println("\n--- Host ---");
         if (!chooseHostTask()) {
             return false;
         }
-        System.out.println("Waiter available: " + waiterOptions());
+        System.out.println("\n--- Waiter ---");
+        System.out.println("Available: " + waiterOptions());
         if (!chooseWaiterTask()) {
             return false;
         }
-        System.out.println("Chef available: " + chefOptions());
+        System.out.println("\n--- Chef ---");
+        System.out.println("Available: " + chefOptions());
         return chooseChefTask();
     }
 
@@ -242,19 +255,17 @@ public class RestaurantRushApp {
     }
 
     private void displayTurnSummary() {
-        System.out.printf("End %d | Served %d | Unhappy departures %d"
-                        + " | Revenue %s | Paid avg %s | Turns used %d%n",
+        System.out.println("\n------------------------------------------------------------");
+        System.out.printf("END OF TURN %d - TOTALS%nServed: %d    Unhappy departures: %d"
+                        + "%nRevenue: %s    Paid average satisfaction: %s%nTurns used: %d%n",
                 restaurant.getTurn(), restaurant.getServedCount(),
                 restaurant.getUnhappyDepartures(), money(restaurant.getRevenueCents()),
                 average(), restaurant.getTurn());
+        System.out.println("------------------------------------------------------------");
     }
 
     private void displayResult() {
-        if (restaurant.isVictory()) {
-            System.out.println("\nVICTORY");
-        } else {
-            System.out.println("\nDEFEAT");
-        }
+        printHeading(restaurant.isVictory() ? "VICTORY" : "DEFEAT");
         System.out.printf("Paid customers: %d / target %d%n",
                 restaurant.getPaidCount(), Restaurant.TARGET_PAID_CUSTOMERS);
         System.out.printf("Revenue: %s / target %s%n",
@@ -275,6 +286,12 @@ public class RestaurantRushApp {
                 System.out.println("Invalid: enter a whole number.");
             }
         }
+    }
+
+    private void printHeading(String title) {
+        System.out.println("\n============================================================");
+        System.out.println(title);
+        System.out.println("============================================================");
     }
 
     private String average() {
