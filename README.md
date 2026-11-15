@@ -1,40 +1,22 @@
 # Restaurant Rush
 
-Restaurant Rush is a Java command-line game developed for SC2002 Object-Oriented Design and Programming.
+Restaurant Rush is our SC2002 Java command-line restaurant management game.
+Repository: [ntthuminh/restaurant-rush](https://github.com/ntthuminh/restaurant-rush)
 
-You play as a restaurant manager with 18 turns to meet customer, revenue and satisfaction targets. Each staff member has limited actions, so you need to decide who to seat, which orders to prepare and when to serve customers.
+## Versions
 
-## Project structure
-
-```text
-restaurant-rush/
-├── README.md
-├── Stage-1/
-│   ├── Codes/
-│   └── testrun_stage1.xlsx
-├── Stage-2/
-│   ├── Codes/
-│   └── testrun_stage2.xlsx
-├── Stage-3/
-│   ├── Codes/
-│   └── testrun_stage3.xlsx
-├── Stage-3-hard/
-└── Stage-3-replay/
-```
-
-| Folder | Contents |
+| Source folder | Version |
 |---|---|
-| `Stage-1/Codes` | Basic game with Regular customers |
-| `Stage-2/Codes` | Customer behaviour extension with VIP and Critic customers |
-| `Stage-3` | Host, ComboMeal and Happy Hour |
-| `Stage-3-hard` | Normal and Hard modes, with recording and replay |
-| `Stage-3-replay` | Input helper classes; this folder is not independently runnable |
+| `Stage-1/Codes` | Basic restaurant operation with Regular customers |
+| `Stage-2/Codes` | VIP and Critic customer behaviour |
+| `Stage-3/Codes` | Host, ComboMeal and Happy Hour |
+| `Stage-3-hard/Codes` | Extended Stage 3 with Normal/Hard selection, drinks, tips, recording and replay |
 
-The versions contain classes with the same names. Compile them separately to avoid conflicts.
+Compile each version separately because they contain classes with the same names. `Stage-3-replay` contains input helpers; run the integrated recording/replay feature through `Stage-3-hard/Codes`.
 
 ## Build and run
 
-Run the following commands from the repository root.
+Use a Java Development Kit (JDK) 17 or later, with `java` and `javac` available in your terminal. Run the following commands from the repository root. Build from the `.java` sources into the separate output folders below.
 
 ### Stage 1
 
@@ -62,50 +44,15 @@ java -cp build/stage-3 RestaurantRushApp
 
 ### Extended Stage 3
 
-This version includes difficulty selection, recording and replay.
+This version includes an opening mode-selection menu, drinks and a Bartender in Hard mode, and recording/replay.
 
 ```bash
 mkdir -p build/stage-3-hard
-javac -d build/stage-3-hard Stage-3-hard/*.java
-```
-
-Run Normal mode:
-
-```bash
+javac -d build/stage-3-hard Stage-3-hard/Codes/*.java
 java -cp build/stage-3-hard RestaurantRushApp
 ```
 
-Run Hard mode:
-
-```bash
-java -cp build/stage-3-hard RestaurantRushApp --hard
-```
-
-## Game objectives
-
-To win in Normal mode, you must meet all three targets at the end of turn 18:
-
-| Condition | Target |
-|---|---:|
-| Paid customers | At least 4 |
-| Revenue | At least $45.00 |
-| Average satisfaction of paid customers | At least 60 |
-
-Missing any target results in Defeat. The game continues for all 18 turns, even if you reach the targets earlier.
-
-Customers count towards the paid customer total and revenue only after paying. Average satisfaction uses their satisfaction at payment and displays `N/A` until the first customer pays.
-
-## Base game settings
-
-The restaurant has two tables, one Waiter, one Chef and one Cashier. Stage 3 adds a Host.
-
-Customers arrive on turns 1, 4, 7, 10, 13 and 16, each starting with 100 satisfaction. They choose their own meals according to fixed rules, so the same decisions produce repeatable runs.
-
-| Menu item | Price | Preparation units |
-|---|---:|---:|
-| Salad | $9.00 | 1 |
-| Burger | $15.00 | 1 |
-| Pasta | $18.00 | 2 |
+At the opening prompt, enter `1` for Normal mode or `2` for Hard mode. Normal mode uses the Stage 3 rules. Hard mode is an optional extension with drinks, a Bartender and tips.
 
 ## Controls
 
@@ -113,165 +60,123 @@ Enter one number at each prompt.
 
 | Staff or option | Input |
 |---|---|
-| Happy Hour | `1` to activate, `0` to decline |
-| Host | Customer number to seat, or `0` to wait |
+| Mode selection (extended application only) | `1` Normal, `2` Hard |
+| Happy Hour (Stage 3 and extended application) | `1` to activate, `0` to decline; the prompt stops after activation |
+| Host (Stage 3 and extended application) | Customer number to seat, or `0` to wait |
 | Waiter | `1` seat, `2` take order, `3` serve, `0` wait |
 | Chef | Customer number whose order to prepare, or `0` to wait |
+| Bartender (Hard mode only) | Customer number whose drink to advance by one preparation unit, or `0` to wait |
 | Cashier | Automatic |
 
 After choosing a Waiter action other than Wait, enter the customer number.
 
 If a choice is invalid, the game explains why and lets you try again without using up the staff member’s action.
 
-## Turn sequence
-
-1. Scheduled customers arrive.
-2. In Stage 3, the Host acts.
-3. The Waiter performs one task or waits.
-4. The Chef advances one order by one preparation unit or waits.
-5. Customers served on an earlier turn finish eating.
-6. The Cashier collects at most one eligible payment, oldest first.
-7. Waiting and seated customers who have not been served lose satisfaction. Customers reaching zero leave.
-8. The game displays the end-of-turn summary.
-
-Food finished by the Chef can be served on the next turn at the earliest. Customers then need a later turn to finish eating and another turn before they can pay.
-
-A table stays occupied until its customer pays or leaves. If a customer abandons the restaurant, their order is cancelled and earns no revenue.
-
-## Development stages
-
-### Stage 1: Basic operation
-
-Stage 1 contains the basic restaurant game: Regular customers, tables, orders, a waiting queue and the original three staff roles.
-
-Regular customers lose eight satisfaction points each turn while waiting for a table or food. Their meal choices repeat by customer ID: Salad, Burger, Pasta.
-
-### Stage 2: Customer behaviour
-
-Stage 2 adds VIP and Critic customers.
-
-| Customer | Waiting loss per turn | Behaviour |
-|---|---:|---|
-| Regular | 8 | Full menu price |
-| VIP | 5 | 10% discount |
-| Critic | 12 | Always orders Pasta |
-
-C2 is a VIP, C3 is a Critic and the other arrivals are Regular customers.
-
-The customer subclasses override methods for their specific behaviour. They still follow the same ordering, serving and payment process.
-
-### Stage 3: Host, ComboMeal and Happy Hour
-
-The Host can seat one customer per turn before the Waiter acts. The Waiter can still seat customers, but the Host allows the Waiter to spend that turn taking an order or serving someone instead.
-
-A ComboMeal contains two existing menu items. It takes the combined preparation units and costs 90% of their combined price, rounded to the nearest cent.
-
-The game uses a Salad + Pasta combo:
-
-```text
-Preparation: 1 + 2 = 3 units
-Price: ($9.00 + $18.00) × 90% = $24.30
-```
-
-Regular and VIP customers whose IDs are divisible by four choose this combo. Critics continue to choose Pasta.
-
-Happy Hour can be activated once, at the start of a turn. It lasts for that turn and the next. While active:
-
-- New orders receive a 20% discount.
-- Customers waiting for a table or food recover 15 satisfaction at turn start, up to a maximum of 100.
-- VIP discounts apply before the Happy Hour discount.
-
-Each bill is fixed when the order is placed. Starting or ending Happy Hour does not change an existing bill.
-
-## Design changes between stages
-
-### Stage 1 to Stage 2
-
-- `Customer.java`: Added VIP and Critic subclasses and methods that subclasses can override.
-- `Order.java`: Allowed the bill to reflect customer discounts.
-- `Restaurant.java`: Added the fixed VIP and Critic arrival rules.
-- `RestaurantRushApp.java`: Updated the instructions and displayed customer types.
-
-The seating, preparation, serving and payment sequence stayed the same.
-
-### Stage 2 to Stage 3
-
-- `Staff.java`: Added the Host and shared seating checks.
-- `Order.java`: Added the `Meal` interface and `ComboMeal`.
-- `Customer.java`: Added combo selection and Happy Hour pricing.
-- `VIPCustomer.java` and `CriticCustomer.java`: Moved the customer subclasses into their own files.
-- `Restaurant.java`: Added the Host phase, Happy Hour management and staff lookup by role.
-- `RestaurantRushApp.java`: Added Host choices, Happy Hour activation and updated action displays.
-
-Both individual dishes and combos implement `Meal`, so orders can prepare them through the same interface.
-
-## Hard mode
-
-Hard mode is an optional extension in `Stage-3-hard`.
-
-| Setting | Normal | Hard |
-|---|---:|---:|
-| Turns | 18 | 18 |
-| Arrival interval | Every 3 turns | Every 2 turns |
-| Paid customer target | 4 | 5 |
-| Revenue target | $45.00 | $110.00 |
-| Average satisfaction target | 60 | 75 |
-| Tips | None | $0.05 per satisfaction point at payment |
-
-Hard mode has its own fixed meal sequence. Tips count towards revenue and are also shown separately in the final result.
-
 ## Recording and replay
 
 Use the application in `Stage-3-hard` to record and replay sessions.
 
-Record a Normal-mode session:
+Record a session:
 
 ```bash
-java -cp build/stage-3-hard RestaurantRushApp --record normal-run.txt
+java -cp build/stage-3-hard RestaurantRushApp --record game-run.txt
 ```
 
-Record a Hard-mode session:
+At the opening menu, enter `1` to record Normal mode or `2` to record Hard mode, then play as usual.
+
+Replay that recording:
 
 ```bash
-java -cp build/stage-3-hard RestaurantRushApp --hard --record hard-run.txt
+java -cp build/stage-3-hard RestaurantRushApp --replay game-run.txt
 ```
 
-Replay a recording:
+The file stores entered choices one per line, including the opening mode selection. Replay supplies those choices to the same prompts and displays the saved inputs. Use recordings made with this version; older recordings that use a `#mode` header or omit the opening selection are incompatible.
 
-```bash
-java -cp build/stage-3-hard RestaurantRushApp --replay normal-run.txt
-```
+Supported arguments are `--record FILE` or `--replay FILE`, used separately. Difficulty is selected through the menu.
 
-The recording saves the game mode and entered choices. Replay uses the saved mode automatically.
-
-Standard `Stage-3` does not handle recording or replay arguments. The separate `Stage-3-replay` folder contains input helper classes only.
-
-## Verification
-
-These winning results were reproduced during local checks with Java 17:
-
-| Version | Paid customers | Revenue | Average satisfaction |
-|---|---:|---:|---:|
-| Stage 1 | 5 | $66.00 | 79.2 |
-| Stage 2 | 5 | $64.50 | 78.0 |
-| Stage 3 | 5 | $74.94 | 86.2 |
-| Hard mode | 6 | $111.30 | 75.0 |
-
-Losing runs were also checked. Choosing Wait for every staff member throughout Normal mode results in zero paid customers, zero revenue and Defeat.
-
-Other checks covered invalid-input retries, staff action order, payment delays, abandonment, discounts, Happy Hour duration, fixed bills and consistent recording/replay results.
-
-The Stage 1, Stage 2 and Stage 3 folders include their test workbooks.
+Standard `Stage-3` does not handle recording or replay arguments. The separate `Stage-3-replay` folder contains input helper classes only; use `Stage-3-hard/Codes` to run the integrated application.
 
 ## Stage tags and comparisons
 
-The tagged releases contain the saved versions of each stage. The comparison pages show the code changes between stages.
+Release and comparison links:
 
 | Evidence | Link |
 |---|---|
 | Stage 1 release | [stage-1](https://github.com/ntthuminh/restaurant-rush/releases/tag/stage-1) |
 | Stage 2 release | [stage-2](https://github.com/ntthuminh/restaurant-rush/releases/tag/stage-2) |
 | Stage 3 release | [stage-3](https://github.com/ntthuminh/restaurant-rush/releases/tag/stage-3) |
+| Stage 3 Hard release | [stage-3-hard](https://github.com/ntthuminh/restaurant-rush/releases/tag/stage-3-hard) |
 | Stage 1 → Stage 2 comparison | [View changes](https://github.com/ntthuminh/restaurant-rush/compare/stage-1...stage-2) |
 | Stage 2 → Stage 3 comparison | [View changes](https://github.com/ntthuminh/restaurant-rush/compare/stage-2...stage-3) |
+| Stage 3 → Stage 3 Hard comparison | [View changes](https://github.com/ntthuminh/restaurant-rush/compare/stage-3...stage-3-hard) |
+
+## Changes between stages
+
+The file summaries below describe the submitted source folders. The comparison links above show the corresponding GitHub changes. Paths in each table are relative to that stage's `Codes` folder.
+
+### Stage 1 to Stage 2
+
+No Java files were added or deleted. VIPCustomer and CriticCustomer were introduced as nested classes in `Customer.java`.
+
+| Changed file | Change and reason |
+|---|---|
+| `Customer.java` | Adds the VIP and Critic subclasses and overridable behaviour for waiting loss, pricing and food choice. This keeps customer differences in the customer objects. |
+| `Order.java` | Accepts the calculated bill in its constructor so it can store the VIP price when the order is taken. |
+| `Restaurant.java` | Creates C2 as a VIP and C3 as a Critic so the base run includes both customer types. |
+| `RestaurantRushApp.java` | Displays customer types and the new rules so the player can see their effects. |
+
+The existing staff and table code is retained. The report explains the design changes and the test results.
+
+### Stage 2 to Stage 3
+
+| File status | Files | Change and reason |
+|---|---|---|
+| Added | `VIPCustomer.java`, `CriticCustomer.java` | Moves the existing nested subclasses into separate files and passes them the shared Happy Hour policy. |
+| Modified | `Customer.java` | Uses `Order.Meal`, selects eligible combos, applies Happy Hour after customer pricing and restores satisfaction only while waiting for service. |
+| Modified | `Order.java` | Adds the nested `Meal` interface and `ComboMeal` class so individual items and combos share price and preparation operations. |
+| Modified | `Staff.java` | Adds the nested Host class and shared seating validation so the Host and Waiter use the same seating checks. |
+| Modified | `Restaurant.java` | Adds the nested HappyHour policy and Host phase. Uses roles to identify staff and reads orders through customers instead of keeping a separate order list. These changes coordinate promotion timing and the extra staff role. |
+| Modified | `RestaurantRushApp.java` | Adds Host and Happy Hour prompts and updates the displayed rules and status information. |
+| Formatting only | `Table.java` | Removes the final newline; table behaviour is unchanged. |
+
+No Java files were deleted. Host, Meal, ComboMeal and HappyHour are new types inside existing files, so they do not appear as new files in the comparison. The report covers their responsibilities, design effects and checks of earlier behaviour.
+
+## Report and presentation
+
+| Submission item                                                                             | Location                                         |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| PDF report, including diagrams, design discussion, test evidence and individual reflections | Refer to report in submission zip                |
+| Recorded presentation                                                                       | Refer to video in submission zip                 |
+| Signed Declaration of Original Work                                                         | Refer to appendix under report in submission zip |
+| Each member's Declaration on Use of GAI Assistance                                          | Refer to AI declaration in submission zip        |
+
+The five narration segments are listed in order of speaker changes. Timestamps are rounded to the nearest second.
+
+| Narration segment | Presentation content                                                                                                  | Timestamp   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 1                 | Introduction, game overview and the three development stages (Tiffany)                                                | 00:00–01:43 |
+| 2                 | Stage 3 gameplay demonstration, Normal-mode victory, and the Hard-mode victory / Normal-mode defeat comparison (Ziyi) | 01:43–05:39 |
+| 3                 | Class diagrams for Stages 1, 2 and 3, with changes between stages (Kaiser)                                            | 05:39–09:18 |
+| 4                 | Selected use case and sequence diagram: VIP customer ordering during Happy Hour (Carlo)                               | 09:18–13:06 |
+| 5                 | Individual contributions, team learning and closing (Nguyen)                                                          | 13:06–14:54 |
+
+### Gameplay evidence in the video
+
+The gameplay demonstration runs from 01:43 to 05:41. It includes Normal-mode victory at 04:58–05:10 and the Hard-mode victory / Normal-mode defeat results at 05:39. The sequence-diagram explanation at 09:18–13:06 covers a VIP order during Happy Hour through serving and payment.
+
+Before submission, check that the gameplay segment visibly includes launch from the submitted project, a constrained staff decision, READY → SERVED → payment, VIP or Critic behaviour and a Stage 3 feature. The stage comparison and diagram segment must show the tag comparisons as well as the diagrams.
+
+## Individual AI histories
+
+Each member must upload their full project-related prompts, AI replies and follow-up exchanges in order to their own branch in the group repository. A summary alone does not meet the requirement. Link to the history folder or file on each member's branch below.
+
+If unaccessible, please refer to the AI declaration submission zip.
+
+| Member                   | AI history branch or folder                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| Low ZiYi | [Full AI conversation history](https://github.com/ntthuminh/restaurant-rush/blob/ziyi-ai-history/ziyi-history.md) |
+| Nguyen Thi Thu Minh | [Full AI conversation history](https://github.com/ntthuminh/restaurant-rush/blob/nguyen-ai-history/Minh%20AI%20Chat%20History.md) |
+| Toh Kai Zhe, Kaiser | [Full AI conversation history](https://github.com/ntthuminh/restaurant-rush/blob/kaiser-ai-history/Kaiser%20AI%20Chat%20History.md) |
+| Carlo Ray Balcos De Luna | [Full AI conversation history](https://github.com/ntthuminh/restaurant-rush/blob/carlo-ai-history/Carlo%20AI%20Chat%20History.md) |
+| Tiffany Ngo Cai Wen | [Full AI conversation history](https://github.com/ntthuminh/restaurant-rush/blob/tiffany-ai-history/Tiffany%20AI%20Chat%20History.md) |
 
